@@ -19,7 +19,7 @@ func NewCache(size int, freshFor, ttl, errorTtl time.Duration) *Cache[any] {
 }
 
 func NewCacheKV[K comparable](size int, freshFor, ttl, errorTtl time.Duration) *Cache[K] {
-	values, _ := lru.New[K, value[*responseValue]](size)
+	values, _ := lru.New[K, value](size)
 	return &Cache[K]{
 		freshFor: freshFor,
 		ttl:      ttl,
@@ -29,7 +29,7 @@ func NewCacheKV[K comparable](size int, freshFor, ttl, errorTtl time.Duration) *
 }
 
 type Cache[K comparable] struct {
-	values *lru.Cache[K, value[*responseValue]]
+	values *lru.Cache[K, value]
 
 	freshFor time.Duration
 	ttl      time.Duration
@@ -91,7 +91,7 @@ func (c *Cache[K]) set(key K, fn singleflight.DoFunc[*responseValue]) singleflig
 		}
 
 		c.mu.Lock()
-		c.values.Add(key, value[*responseValue]{
+		c.values.Add(key, value{
 			v:          val,
 			expiry:     time.Now().Add(effectiveTtl),
 			bestBefore: time.Now().Add(c.freshFor),
@@ -102,22 +102,22 @@ func (c *Cache[K]) set(key K, fn singleflight.DoFunc[*responseValue]) singleflig
 	})
 }
 
-type value[V any] struct {
-	v V
+type value struct {
+	v *responseValue
 
 	bestBefore time.Time // cache entry freshness cutoff
 	expiry     time.Time // cache entry time to live cutoff
 }
 
-func (v *value[V]) IsFresh() bool {
+func (v *value) IsFresh() bool {
 	return v.bestBefore.After(time.Now())
 }
 
-func (v *value[V]) IsExpired() bool {
+func (v *value) IsExpired() bool {
 	return v.expiry.Before(time.Now())
 }
 
-func (v *value[V]) Value() V {
+func (v *value) Value() *responseValue {
 	return v.v
 }
 
