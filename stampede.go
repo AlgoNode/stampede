@@ -2,6 +2,7 @@ package stampede
 
 import (
 	"context"
+	"net/http"
 	"sync"
 	"time"
 
@@ -82,10 +83,17 @@ func (c *Cache[K]) set(key K, fn singleflight.DoFunc[*responseValue]) singleflig
 			return val, err
 		}
 
+		var effectiveTtl time.Duration
+		if val.status == http.StatusOK {
+			effectiveTtl = c.ttl
+		} else {
+			effectiveTtl = c.errorTtl
+		}
+
 		c.mu.Lock()
 		c.values.Add(key, value[*responseValue]{
 			v:          val,
-			expiry:     time.Now().Add(c.ttl),
+			expiry:     time.Now().Add(effectiveTtl),
 			bestBefore: time.Now().Add(c.freshFor),
 		})
 		c.mu.Unlock()
