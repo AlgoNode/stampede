@@ -13,43 +13,43 @@ import (
 // Prevents cache stampede https://en.wikipedia.org/wiki/Cache_stampede by only running a
 // single data fetch operation per expired / missing key regardless of number of requests to that key.
 
-func NewCache(size int, freshFor, ttl time.Duration) *Cache[any, any] {
-	return NewCacheKV[any, any](size, freshFor, ttl)
+func NewCache(size int, freshFor, ttl time.Duration) *Cache[any] {
+	return NewCacheKV[any](size, freshFor, ttl)
 }
 
-func NewCacheKV[K comparable, V any](size int, freshFor, ttl time.Duration) *Cache[K, V] {
-	values, _ := lru.New[K, value[V]](size)
-	return &Cache[K, V]{
+func NewCacheKV[K comparable](size int, freshFor, ttl time.Duration) *Cache[K] {
+	values, _ := lru.New[K, value[*responseValue]](size)
+	return &Cache[K]{
 		freshFor: freshFor,
 		ttl:      ttl,
 		values:   values,
 	}
 }
 
-type Cache[K comparable, V any] struct {
-	values *lru.Cache[K, value[V]]
+type Cache[K comparable] struct {
+	values *lru.Cache[K, value[*responseValue]]
 
 	freshFor time.Duration
 	ttl      time.Duration
 
 	mu        sync.RWMutex
-	callGroup singleflight.Group[K, V]
+	callGroup singleflight.Group[K, *responseValue]
 }
 
-func (c *Cache[K, V]) Get(ctx context.Context, key K, fn singleflight.DoFunc[V]) (V, error) {
+func (c *Cache[K]) Get(ctx context.Context, key K, fn singleflight.DoFunc[*responseValue]) (*responseValue, error) {
 	return c.get(ctx, key, false, fn)
 }
 
-func (c *Cache[K, V]) GetFresh(ctx context.Context, key K, fn singleflight.DoFunc[V]) (V, error) {
+func (c *Cache[K]) GetFresh(ctx context.Context, key K, fn singleflight.DoFunc[*responseValue]) (*responseValue, error) {
 	return c.get(ctx, key, true, fn)
 }
 
-func (c *Cache[K, V]) Set(ctx context.Context, key K, fn singleflight.DoFunc[V]) (V, bool, error) {
+func (c *Cache[K]) Set(ctx context.Context, key K, fn singleflight.DoFunc[*responseValue]) (*responseValue, bool, error) {
 	v, err, shared := c.callGroup.Do(key, c.set(key, fn))
 	return v, shared, err
 }
 
-func (c *Cache[K, V]) get(ctx context.Context, key K, freshOnly bool, fn singleflight.DoFunc[V]) (V, error) {
+func (c *Cache[K]) get(ctx context.Context, key K, freshOnly bool, fn singleflight.DoFunc[*responseValue]) (*responseValue, error) {
 	c.mu.RLock()
 	val, ok := c.values.Get(key)
 	c.mu.RUnlock()
@@ -73,15 +73,15 @@ func (c *Cache[K, V]) get(ctx context.Context, key K, freshOnly bool, fn singlef
 	return v, err
 }
 
-func (c *Cache[K, V]) set(key K, fn singleflight.DoFunc[V]) singleflight.DoFunc[V] {
-	return singleflight.DoFunc[V](func() (V, error) {
+func (c *Cache[K]) set(key K, fn singleflight.DoFunc[*responseValue]) singleflight.DoFunc[*responseValue] {
+	return singleflight.DoFunc[*responseValue](func() (*responseValue, error) {
 		val, err := fn()
 		if err != nil {
 			return val, err
 		}
 
 		c.mu.Lock()
-		c.values.Add(key, value[V]{
+		c.values.Add(key, value[*responseValue]{
 			v:          val,
 			expiry:     time.Now().Add(c.ttl),
 			bestBefore: time.Now().Add(c.freshFor),

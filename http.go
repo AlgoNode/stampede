@@ -75,7 +75,7 @@ func HandlerWithKey(cacheSize int, ttl time.Duration, keyFunc func(r *http.Reque
 }
 
 func stampede(cacheSize int, ttl time.Duration, keyFunc func(r *http.Request) uint64) func(next http.Handler) http.Handler {
-	cache := NewCacheKV[uint64, responseValue](cacheSize, ttl, ttl*2)
+	cache := NewCacheKV[uint64](cacheSize, ttl, ttl*2)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +87,7 @@ func stampede(cacheSize int, ttl time.Duration, keyFunc func(r *http.Request) ui
 			first := false
 
 			// process request (single flight)
-			respVal, err := cache.GetFresh(r.Context(), key, func() (responseValue, error) {
+			respVal, err := cache.GetFresh(r.Context(), key, func() (*responseValue, error) {
 				first = true
 				buf := bytes.NewBuffer(nil)
 				ww := &responseWriter{ResponseWriter: w, tee: buf}
@@ -103,7 +103,7 @@ func stampede(cacheSize int, ttl time.Duration, keyFunc func(r *http.Request) ui
 					// while writing only the body, an attempt is made to write the default header (http.StatusOK)
 					skip: ww.IsHeaderWrong(),
 				}
-				return val, nil
+				return &val, nil
 			})
 
 			// the first request to trigger the fetch should return as it's already
