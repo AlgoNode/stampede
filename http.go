@@ -75,7 +75,7 @@ func HandlerWithKey(cacheSize int, ttl, errorTtl time.Duration, keyFunc func(r *
 }
 
 func stampede(cacheSize int, ttl, errorTtl time.Duration, keyFunc func(r *http.Request) uint64) func(next http.Handler) http.Handler {
-	cache := NewCacheKV[uint64](cacheSize, ttl, ttl*2, errorTtl)
+	cache := NewCacheKV[uint64](cacheSize, ttl, errorTtl)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

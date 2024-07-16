@@ -14,14 +14,13 @@ import (
 // Prevents cache stampede https://en.wikipedia.org/wiki/Cache_stampede by only running a
 // single data fetch operation per expired / missing key regardless of number of requests to that key.
 
-func NewCache(size int, freshFor, ttl, errorTtl time.Duration) *Cache[any] {
-	return NewCacheKV[any](size, freshFor, ttl, errorTtl)
+func NewCache(size int, ttl, errorTtl time.Duration) *Cache[any] {
+	return NewCacheKV[any](size, ttl, errorTtl)
 }
 
-func NewCacheKV[K comparable](size int, freshFor, ttl, errorTtl time.Duration) *Cache[K] {
+func NewCacheKV[K comparable](size int, ttl, errorTtl time.Duration) *Cache[K] {
 	values, _ := lru.New[K, value](size)
 	return &Cache[K]{
-		freshFor: freshFor,
 		ttl:      ttl,
 		errorTtl: errorTtl,
 		values:   values,
@@ -31,7 +30,6 @@ func NewCacheKV[K comparable](size int, freshFor, ttl, errorTtl time.Duration) *
 type Cache[K comparable] struct {
 	values *lru.Cache[K, value]
 
-	freshFor time.Duration
 	ttl      time.Duration
 	errorTtl time.Duration
 
@@ -93,8 +91,8 @@ func (c *Cache[K]) set(key K, fn singleflight.DoFunc[*responseValue]) singleflig
 		c.mu.Lock()
 		c.values.Add(key, value{
 			v:          val,
-			expiry:     time.Now().Add(effectiveTtl),
-			bestBefore: time.Now().Add(c.freshFor),
+			expiry:     time.Now().Add(effectiveTtl * 2),
+			bestBefore: time.Now().Add(effectiveTtl),
 		})
 		c.mu.Unlock()
 
