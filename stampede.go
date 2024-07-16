@@ -13,15 +13,16 @@ import (
 // Prevents cache stampede https://en.wikipedia.org/wiki/Cache_stampede by only running a
 // single data fetch operation per expired / missing key regardless of number of requests to that key.
 
-func NewCache(size int, freshFor, ttl time.Duration) *Cache[any] {
-	return NewCacheKV[any](size, freshFor, ttl)
+func NewCache(size int, freshFor, ttl, errorTtl time.Duration) *Cache[any] {
+	return NewCacheKV[any](size, freshFor, ttl, errorTtl)
 }
 
-func NewCacheKV[K comparable](size int, freshFor, ttl time.Duration) *Cache[K] {
+func NewCacheKV[K comparable](size int, freshFor, ttl, errorTtl time.Duration) *Cache[K] {
 	values, _ := lru.New[K, value[*responseValue]](size)
 	return &Cache[K]{
 		freshFor: freshFor,
 		ttl:      ttl,
+		errorTtl: errorTtl,
 		values:   values,
 	}
 }
@@ -31,6 +32,7 @@ type Cache[K comparable] struct {
 
 	freshFor time.Duration
 	ttl      time.Duration
+	errorTtl time.Duration
 
 	mu        sync.RWMutex
 	callGroup singleflight.Group[K, *responseValue]

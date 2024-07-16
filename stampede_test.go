@@ -107,7 +107,7 @@ func TestHandler(t *testing.T) {
 		})
 	}
 
-	h := stampede.Handler(512, 1*time.Second)
+	h := stampede.Handler(512, 1*time.Second, 1*time.Second)
 
 	ts := httptest.NewServer(counter(recoverer(h(http.HandlerFunc(app)))))
 	defer ts.Close()
@@ -188,7 +188,7 @@ func TestBypassCORSHeaders(t *testing.T) {
 		atomic.AddUint64(&count, 1)
 	}
 
-	h := stampede.Handler(512, 1*time.Second)
+	h := stampede.Handler(512, 1*time.Second, 1*time.Second)
 	c := cors.New(cors.Options{
 		AllowedOrigins: domains,
 		AllowedMethods: []string{"GET"},
@@ -255,7 +255,7 @@ func TestBypassCORSHeaders(t *testing.T) {
 
 func TestPanic(t *testing.T) {
 	mux := http.NewServeMux()
-	middleware := stampede.Handler(100, 1*time.Hour)
+	middleware := stampede.Handler(100, 1*time.Hour, 1*time.Hour)
 	mux.Handle("/", middleware(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		t.Log(r.Method, r.URL)
 	})))
