@@ -20,7 +20,7 @@ var stripOutHeaders = []string{
 	"Access-Control-Request-Method",
 }
 
-func Handler(cacheSize int, ttl time.Duration, paths ...string) func(next http.Handler) http.Handler {
+func Handler(cacheSize int, ttl, errorTtl time.Duration, paths ...string) func(next http.Handler) http.Handler {
 	defaultKeyFunc := func(r *http.Request) uint64 {
 		// Read the request payload, and then setup buffer for future reader
 		var buf []byte
@@ -34,10 +34,10 @@ func Handler(cacheSize int, ttl time.Duration, paths ...string) func(next http.H
 		return key
 	}
 
-	return HandlerWithKey(cacheSize, ttl, defaultKeyFunc, paths...)
+	return HandlerWithKey(cacheSize, ttl, errorTtl, defaultKeyFunc, paths...)
 }
 
-func HandlerWithKey(cacheSize int, ttl time.Duration, keyFunc func(r *http.Request) uint64, paths ...string) func(next http.Handler) http.Handler {
+func HandlerWithKey(cacheSize int, ttl, errorTtl time.Duration, keyFunc func(r *http.Request) uint64, paths ...string) func(next http.Handler) http.Handler {
 	// mapping of url paths that are cacheable by the stampede handler
 	pathMap := map[string]struct{}{}
 	for _, path := range paths {
@@ -51,7 +51,7 @@ func HandlerWithKey(cacheSize int, ttl time.Duration, keyFunc func(r *http.Reque
 	// executes, and the remaining handlers will use the response from
 	// the first request. The content thereafter will be cached for up to
 	// ttl time for subsequent requests for further caching.
-	h := stampede(cacheSize, ttl, keyFunc)
+	h := stampede(cacheSize, ttl, errorTtl, keyFunc)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -74,8 +74,8 @@ func HandlerWithKey(cacheSize int, ttl time.Duration, keyFunc func(r *http.Reque
 	}
 }
 
-func stampede(cacheSize int, ttl time.Duration, keyFunc func(r *http.Request) uint64) func(next http.Handler) http.Handler {
-	cache := NewCacheKV[uint64, responseValue](cacheSize, ttl, ttl*2)
+func stampede(cacheSize int, ttl, errorTtl time.Duration, keyFunc func(r *http.Request) uint64) func(next http.Handler) http.Handler {
+	cache := NewCacheKV[uint64](cacheSize, ttl, errorTtl)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +87,7 @@ func stampede(cacheSize int, ttl time.Duration, keyFunc func(r *http.Request) ui
 			first := false
 
 			// process request (single flight)
-			respVal, err := cache.GetFresh(r.Context(), key, func() (responseValue, error) {
+			respVal, err := cache.GetFresh(r.Context(), key, func() (*responseValue, error) {
 				first = true
 				buf := bytes.NewBuffer(nil)
 				ww := &responseWriter{ResponseWriter: w, tee: buf}
@@ -103,7 +103,7 @@ func stampede(cacheSize int, ttl time.Duration, keyFunc func(r *http.Request) ui
 					// while writing only the body, an attempt is made to write the default header (http.StatusOK)
 					skip: ww.IsHeaderWrong(),
 				}
-				return val, nil
+				return &val, nil
 			})
 
 			// the first request to trigger the fetch should return as it's already
