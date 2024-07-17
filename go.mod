@@ -1,4 +1,4 @@
-module github.com/agodnic/stampede
+module github.com/AlgoNode/stampede
 
 go 1.20
 
