@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlgoNode/stampede"
 	"github.com/go-chi/cors"
-	"github.com/go-chi/stampede"
 	"github.com/stretchr/testify/assert"
 )
 
