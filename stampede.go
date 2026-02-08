@@ -37,20 +37,20 @@ type Cache[K comparable] struct {
 	callGroup singleflight.Group[K, *responseValue]
 }
 
-func (c *Cache[K]) Get(ctx context.Context, key K, fn singleflight.DoFunc[*responseValue]) (*responseValue, error) {
+func (c *Cache[K]) Get(ctx context.Context, key K, fn func() (*responseValue, error)) (*responseValue, error) {
 	return c.get(ctx, key, false, fn)
 }
 
-func (c *Cache[K]) GetFresh(ctx context.Context, key K, fn singleflight.DoFunc[*responseValue]) (*responseValue, error) {
+func (c *Cache[K]) GetFresh(ctx context.Context, key K, fn func() (*responseValue, error)) (*responseValue, error) {
 	return c.get(ctx, key, true, fn)
 }
 
-func (c *Cache[K]) Set(ctx context.Context, key K, fn singleflight.DoFunc[*responseValue]) (*responseValue, bool, error) {
+func (c *Cache[K]) Set(ctx context.Context, key K, fn func() (*responseValue, error)) (*responseValue, bool, error) {
 	v, err, shared := c.callGroup.Do(key, c.set(key, fn))
 	return v, shared, err
 }
 
-func (c *Cache[K]) get(ctx context.Context, key K, freshOnly bool, fn singleflight.DoFunc[*responseValue]) (*responseValue, error) {
+func (c *Cache[K]) get(ctx context.Context, key K, freshOnly bool, fn func() (*responseValue, error)) (*responseValue, error) {
 	c.mu.RLock()
 	val, ok := c.values.Get(key)
 	c.mu.RUnlock()
@@ -74,8 +74,8 @@ func (c *Cache[K]) get(ctx context.Context, key K, freshOnly bool, fn singleflig
 	return v, err
 }
 
-func (c *Cache[K]) set(key K, fn singleflight.DoFunc[*responseValue]) singleflight.DoFunc[*responseValue] {
-	return singleflight.DoFunc[*responseValue](func() (*responseValue, error) {
+func (c *Cache[K]) set(key K, fn func() (*responseValue, error)) func() (*responseValue, error) {
+	return func() (*responseValue, error) {
 		val, err := fn()
 		if err != nil {
 			return val, err
@@ -97,7 +97,7 @@ func (c *Cache[K]) set(key K, fn singleflight.DoFunc[*responseValue]) singleflig
 		c.mu.Unlock()
 
 		return val, nil
-	})
+	}
 }
 
 type value struct {
